@@ -1,0 +1,213 @@
+// Author: Aditya Swami
+
+#include <stdio.h>
+#include <string.h>
+#include "util.h"
+#include <stdlib.h>
+
+EXEC SQL INCLUDE SQLCA; 
+
+
+void printBookDetails(char givenPubid[10]){
+
+   EXEC SQL BEGIN DECLARE SECTION;
+   char pubid[10];
+   char authorname[22];
+   short int authname;
+   int aorder;
+   char publisher[50];
+   int year; 
+   int maxvalue;
+   EXEC SQL END DECLARE SECTION;
+
+   int count = 1;
+
+   strcpy(pubid,givenPubid);
+
+   EXEC SQL DECLARE C2 CURSOR FOR
+
+   SELECT DISTINCT A.name,W.aorder FROM book B INNER JOIN wrote W ON B.pubid = W.pubid INNER JOIN author A ON A.aid = W.aid WHERE B.pubid = :pubid ORDER BY W.aorder;
+
+   EXEC SQL SELECT DISTINCT MAX(W.aorder) INTO :maxvalue FROM book B INNER JOIN wrote W ON B.pubid = W.pubid INNER JOIN author A ON A.aid = W.aid WHERE B.pubid = :pubid;
+
+   printf("Authors: "); 
+
+   EXEC SQL OPEN C2;
+   for(;;){
+      EXEC SQL FETCH C2 INTO :authorname, :aorder;
+      if (SQLCODE == 100) { break;}
+      else if (SQLCODE < 0) {break;}
+      else {
+         printf("%s", authorname);
+         if(count<maxvalue){
+            printf(", ");
+         }
+         count++;
+      }
+   }
+   printf("\n");
+   EXEC SQL SELECT publisher,year INTO :publisher,:year FROM book WHERE pubid = :pubid;
+   printf("Publisher: %s\n", publisher);
+   printf("Year %d\n", year);
+   EXEC SQL CLOSE C2;
+}
+
+void printArticleDetails(char givenPubid[10]){
+
+   EXEC SQL BEGIN DECLARE SECTION;
+   char pubid[10];
+   char authorname[22];
+   short int authname;
+   int aorder;
+   int maxvalue;
+   char appearsin[10];
+   int startpage;
+   int endpage;
+   EXEC SQL END DECLARE SECTION;
+
+   int count = 1;
+
+   strcpy(pubid,givenPubid);
+
+   EXEC SQL DECLARE C3 CURSOR FOR
+
+   SELECT DISTINCT A.name,W.aorder FROM article AR INNER JOIN wrote W ON AR.pubid = W.pubid INNER JOIN author A ON A.aid = W.aid WHERE AR.pubid = :pubid ORDER BY W.aorder;
+
+   EXEC SQL SELECT DISTINCT MAX(W.aorder) INTO :maxvalue FROM article AR INNER JOIN wrote W ON AR.pubid = W.pubid INNER JOIN author A ON A.aid = W.aid WHERE AR.pubid = :pubid;
+
+   printf("Authors: "); 
+
+   EXEC SQL OPEN C3;
+   
+   for(;;){
+      EXEC SQL FETCH C3 INTO :authorname, :aorder;
+      if (SQLCODE == 100) { break;}
+      else if (SQLCODE < 0) {break;}
+      else {
+         printf("%s", authorname);
+         if(count<maxvalue){
+            printf(", ");
+         }
+         count++;
+      }
+   }
+   printf("\n");
+   EXEC SQL SELECT appearsin,startpage,endpage INTO :appearsin,:startpage,:endpage FROM article WHERE pubid = :pubid;
+   printf("In: %s\n", appearsin);
+   printf("Pages: %d--%d\n", startpage,endpage);
+   EXEC SQL CLOSE C3;
+}
+
+void printJournalDetails(char givenPubid[10]){
+
+   EXEC SQL BEGIN DECLARE SECTION;
+   char pubid[10];
+   int year;
+   int volume;
+   int number;
+   EXEC SQL END DECLARE SECTION;
+
+   strcpy(pubid,givenPubid);
+
+   EXEC SQL SELECT volume,number,year INTO :volume,:number,:year FROM journal WHERE pubid =:pubid;
+   printf("Volume: %d\n", volume);
+   printf("Number: %d\n", number);
+   printf("Year: %d\n", year);
+}
+
+void printProceedingDetails(char givenPubid[10]){
+   EXEC SQL BEGIN DECLARE SECTION;
+   char pubid[10];
+   int year;
+   EXEC SQL END DECLARE SECTION;
+
+   strcpy(pubid,givenPubid);
+
+   EXEC SQL SELECT year INTO :year FROM proceedings WHERE pubid=:pubid;
+   printf("Year: %d\n", year ); 
+}
+
+int main(int argc, char *argv[]) {
+   char * getpass();
+
+   EXEC SQL BEGIN DECLARE SECTION;
+   char db[6] = "cs348";
+   char name[22];
+   char pubid[10];
+   char type [12];
+   char title [70];
+   char authorname[22];
+   int year;       
+   short int authname;
+   EXEC SQL END DECLARE SECTION;
+
+   char namecheck[22];
+
+   strcpy(namecheck,argv[1]);
+   strcpy(name,namecheck);
+
+   EXEC SQL WHENEVER SQLERROR  GO TO error;
+
+   EXEC SQL CONNECT TO :db;
+
+   EXEC SQL DECLARE C1 CURSOR FOR
+
+   (SELECT DISTINCT B.pubid,B.year AS year,A1.name AS AUTHORNAME, 'book' AS type FROM book B INNER JOIN wrote W1 ON W1.pubid = B.pubid INNER JOIN AUTHOR A1 ON A1.aid = W1.aid WHERE W1.aorder = 1 AND B.pubid IN (SELECT W.pubid FROM wrote W WHERE W.aid IN (SELECT A.aid FROM author A WHERE A.name = :name)))
+   UNION 
+   (SELECT DISTINCT ARPRPUBID, PR.year AS year, AUTHORNAME, 'article' AS type FROM proceedings PR, (SELECT AR.pubid AS ARPRPUBID ,AR.appearsin AS PRAPPEARSIN FROM article AR WHERE AR.pubid IN (SELECT W.pubid FROM wrote W WHERE W.aid IN (SELECT A.aid FROM author A WHERE A.name = :name))
+      ),(SELECT A1.name AS AUTHORNAME, W1.pubid AS W1Pubid FROM article AR1 INNER JOIN wrote W1 ON W1.pubid = AR1.pubid INNER JOIN AUTHOR A1 ON A1.aid = W1.aid WHERE W1.aorder = 1) WHERE PRAPPEARSIN = PR.pubid AND ARPRPUBID = W1Pubid) 
+   UNION
+   (SELECT DISTINCT ARBPUBID, B.year AS year, AUTHORNAME, 'article' AS type FROM book B, (SELECT AR.pubid AS ARBPUBID ,AR.appearsin AS BAPPEARSIN FROM article AR WHERE AR.pubid IN (SELECT W.pubid FROM wrote W WHERE W.aid IN (SELECT A.aid FROM author A WHERE A.name = :name))
+      ),(SELECT A1.name AS AUTHORNAME, W1.pubid AS W1Pubid FROM article AR1 INNER JOIN wrote W1 ON W1.pubid = AR1.pubid INNER JOIN AUTHOR A1 ON A1.aid = W1.aid WHERE W1.aorder = 1) WHERE BAPPEARSIN = B.pubid AND ARBPUBID = W1Pubid)
+   UNION
+   (SELECT DISTINCT ARJPUBID, J.year AS year, AUTHORNAME, 'article' AS type FROM journal J, (SELECT AR.pubid AS ARJPUBID ,AR.appearsin AS JAPPEARSIN FROM article AR WHERE AR.pubid IN (SELECT W.pubid FROM wrote W WHERE W.aid IN (SELECT A.aid FROM author A WHERE A.name = :name))
+      ),(SELECT A1.name AS AUTHORNAME, W1.pubid AS W1Pubid FROM article AR1 INNER JOIN wrote W1 ON W1.pubid = AR1.pubid INNER JOIN AUTHOR A1 ON A1.aid = W1.aid WHERE W1.aorder = 1) WHERE JAPPEARSIN = J.pubid AND ARJPUBID = W1Pubid)
+   UNION
+   (SELECT DISTINCT PR.pubid, PR.year AS year, '' AS AUTHORNAME , 'proceedings' AS type FROM proceedings PR, (SELECT AR.pubid ,AR.appearsin AS PRAPPEARSIN FROM article AR WHERE AR.pubid IN (SELECT W.pubid FROM wrote W WHERE W.aid IN (SELECT A.aid FROM author A WHERE A.name = :name))
+      ) WHERE PRAPPEARSIN = PR.pubid)
+   UNION
+   (SELECT DISTINCT J.pubid, J.year AS year, '' AS AUTHORNAME , 'journal' AS type FROM journal J, (SELECT AR.pubid ,AR.appearsin AS JAPPEARSIN FROM article AR WHERE AR.pubid IN (SELECT W.pubid FROM wrote W WHERE W.aid IN (SELECT A.aid FROM author A WHERE A.name = :name))
+      ) WHERE JAPPEARSIN = J.pubid)
+   UNION
+   (SELECT DISTINCT B.pubid, B.year AS year, AUTHORNAME, 'book' AS type FROM book B, (SELECT AR.pubid, AR.appearsin AS BAPPEARSIN FROM article AR WHERE AR.pubid IN (SELECT W.pubid FROM wrote W WHERE W.aid IN (SELECT A.aid FROM author A WHERE A.name = :name))
+      ),(SELECT A1.name AS AUTHORNAME, W1.pubid AS W1Pubid FROM book B INNER JOIN wrote W1 ON W1.pubid = B.pubid INNER JOIN AUTHOR A1 ON A1.aid = W1.aid WHERE W1.aorder = 1) WHERE BAPPEARSIN = B.pubid AND B.pubid = W1Pubid)
+   ORDER BY year DESC, AUTHORNAME ASC;
+
+   EXEC SQL OPEN C1;
+
+   for( ;; ) {
+      EXEC SQL FETCH C1 INTO :pubid,:year,:authorname :authname,:type;
+      
+      if (SQLCODE == 100) { break;}
+      else if (SQLCODE < 0) { printf("no such author\n"); break;}
+      else
+      {
+         printf("\n");
+         EXEC SQL SELECT title INTO :title FROM publication WHERE pubid=:pubid;
+         printf("Pubid: %s\n", pubid);
+         printf("Type: %s\n", type);
+         printf("Title: %s\n", title);
+
+         if(strcmp(type,"book")==0)
+            printBookDetails(pubid);
+         else if(strcmp(type,"journal")==0)
+            printJournalDetails(pubid);
+         else if(strcmp(type,"proceedings")==0)
+            printProceedingDetails(pubid);
+         else if(strcmp(type,"article")==0)
+            printArticleDetails(pubid);
+      }
+   }
+   EXEC SQL CLOSE C1;
+   EXEC SQL COMMIT;
+   EXEC SQL CONNECT reset;
+   exit(0);
+
+   error:
+   check_error("My error",&sqlca);
+   EXEC SQL WHENEVER SQLERROR CONTINUE;
+
+   EXEC SQL ROLLBACK;
+   EXEC SQL CONNECT reset;
+   exit(1);
+}

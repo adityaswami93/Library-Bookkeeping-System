@@ -1,0 +1,413 @@
+// Author: Aditya Swami
+
+#include <stdio.h>
+#include <string.h>
+#include "util.h"
+#include <stdlib.h>
+
+EXEC SQL INCLUDE SQLCA; 
+
+void authorUpdateCreate(char* token){
+
+  EXEC SQL BEGIN DECLARE SECTION;
+  char name[22];
+  int aid;
+  int count;
+  EXEC SQL END DECLARE SECTION;
+
+  aid = atoi(strtok(token,"#"));
+
+  token = NULL;
+  
+  strcpy(name,strtok(token,"#"));
+
+  EXEC SQL 
+  SELECT COUNT(aid) INTO :count FROM author where aid =: aid;
+
+  if(count==0){
+    EXEC SQL INSERT INTO author(aid,name) VALUES (:aid,:name);
+  }
+  if(count==1){
+    EXEC SQL UPDATE author SET name =:name WHERE aid =: aid;
+  }
+
+}
+
+
+void authorurlUpdateCreate(char* token){
+
+  EXEC SQL BEGIN DECLARE SECTION;
+  char url[42];
+  int aid;
+  int count;
+  EXEC SQL END DECLARE SECTION;
+
+  aid = atoi(strtok(token,"#"));
+  token = NULL;
+  strcpy(url,strtok(token,"#"));
+
+  EXEC SQL 
+  SELECT COUNT(aid) INTO :count FROM author where aid =: aid;
+
+  if(count==0){
+    EXEC SQL INSERT INTO author(aid,url) VALUES (:aid,:url);
+  }
+  if(count==1){
+    EXEC SQL UPDATE author SET url =:url WHERE aid =: aid;
+  }
+
+}
+
+
+void bookUpdateCreate(char* token){
+
+  EXEC SQL BEGIN DECLARE SECTION;
+  int count;
+  char pubid[10];
+  char title [70];
+  char publisher[50];
+  int year;
+  int aid;
+  int aorder;
+  int maxvalue;
+  char authorname[22];
+  EXEC SQL END DECLARE SECTION;
+
+  char *authors;
+  char *str1, *subauthors;
+  int j;
+  int commaCount = 1;
+
+  strcpy(pubid,strtok(token,"#"));
+  token = NULL;
+  strcpy(title,strtok(token,"#"));
+  token = NULL;
+  authors = strtok(token,"#");
+  token = NULL;
+  strcpy(publisher,strtok(token,"#"));
+  token = NULL;
+  year = atoi(strtok(token,"#"));
+  token = NULL;
+
+  EXEC SQL 
+  SELECT COUNT(pubid) INTO :count FROM publication where pubid =: pubid;
+
+  if(count==0){
+
+    EXEC SQL INSERT INTO publication(pubid,title) VALUES (:pubid,:title);
+
+    for (j = 1, str1 = authors; ; j++, str1 = NULL) {
+      subauthors = strtok(str1,";");
+      if (subauthors == NULL)
+        break;
+      aid = atoi(subauthors);
+      aorder = j;  
+      EXEC SQL INSERT INTO wrote(aid,pubid,aorder) VALUES (:aid,:pubid,:aorder);  
+    }
+
+    EXEC SQL INSERT INTO book(pubid,publisher,year) VALUES (:pubid,:publisher,:year);
+  }
+
+  if(count==1){
+    EXEC SQL UPDATE publication SET title =:title WHERE pubid =: pubid;
+
+    for (j = 1, str1 = authors; ; j++, str1 = NULL) {
+      subauthors = strtok(str1,";");
+      if (subauthors == NULL)
+        break;
+      aid = atoi(subauthors);
+      aorder = j;  
+      EXEC SQL UPDATE wrote SET aid =: aid WHERE pubid =: pubid AND aorder=:aorder; 
+    }
+
+    EXEC SQL UPDATE book SET publisher =:publisher, year=:year WHERE pubid =: pubid;
+
+  }
+
+  printf("\n");
+  printf("Pubid: %s\n", pubid);
+  printf("Type: book\n");
+  printf("Title: %s\n", title);
+
+
+  EXEC SQL DECLARE C2 CURSOR FOR
+
+  SELECT DISTINCT A.name,W.aorder FROM book B INNER JOIN wrote W ON B.pubid = W.pubid INNER JOIN author A ON A.aid = W.aid WHERE B.pubid = :pubid ORDER BY W.aorder;
+
+  EXEC SQL SELECT DISTINCT MAX(W.aorder) INTO :maxvalue FROM book B INNER JOIN wrote W ON B.pubid = W.pubid INNER JOIN author A ON A.aid = W.aid WHERE B.pubid = :pubid;
+
+  printf("Authors: "); 
+
+  EXEC SQL OPEN C2;
+
+  for(;;){
+    EXEC SQL FETCH C2 INTO :authorname, :aorder;
+    if (SQLCODE == 100) { break;}
+    else if (SQLCODE < 0) {break;}
+    else {
+     printf("%s", authorname); 
+     if(commaCount<maxvalue)
+      printf(", ");
+    commaCount++; 
+  }
+}
+printf("\n");
+printf("Publisher: %s\n", publisher);
+printf("Year %d\n", year);
+EXEC SQL CLOSE C2;
+}
+
+void journalUpdateCreate(char* token){
+
+  EXEC SQL BEGIN DECLARE SECTION;
+  
+  char pubid[10];
+  char title [70];
+  int volume;
+  int number;
+  int year;
+  int count;
+
+  EXEC SQL END DECLARE SECTION;
+
+  strcpy(pubid,strtok(token,"#"));
+  token = NULL;
+  strcpy(title,strtok(token,"#"));
+  token = NULL;
+  volume = atoi(strtok(token,"#"));
+  token = NULL;
+  number = atoi(strtok(token,"#"));
+  token = NULL;
+  year = atoi(strtok(token,"#"));
+  token = NULL;
+
+  EXEC SQL SELECT COUNT(pubid) INTO :count FROM publication where pubid =: pubid;
+
+  if(count==0){
+    EXEC SQL INSERT INTO publication(pubid,title) VALUES (:pubid,:title);
+    EXEC SQL INSERT INTO journal(pubid,volume,number,year) VALUES (:pubid,:volume,:number,:year);
+  }
+
+  if(count==1){
+    EXEC SQL UPDATE publication SET title =:title WHERE pubid =: pubid;
+    EXEC SQL UPDATE journal SET volume =:volume, number=:number, year=:year WHERE pubid =: pubid;
+  }
+
+  printf("\n");
+  printf("Pubid: %s\n", pubid);
+  printf("Type: journal\n");
+  printf("Title: %s\n", title);
+  printf("Volume: %d\n", volume);
+  printf("Number: %d\n", number);
+  printf("Year: %d\n", year);
+}
+
+void proceedingsUpdateCreate (char* token){
+
+  EXEC SQL BEGIN DECLARE SECTION;
+  
+  char pubid[10];
+  char title [70];
+  int year;
+  int count;
+
+  EXEC SQL END DECLARE SECTION;
+
+  strcpy(pubid,strtok(token,"#"));
+  token = NULL;
+  strcpy(title,strtok(token,"#"));
+  token = NULL;
+  year = atoi(strtok(token,"#"));
+  token = NULL;
+
+  EXEC SQL SELECT COUNT(pubid) INTO :count FROM publication where pubid =: pubid;
+
+  if(count==0){
+    EXEC SQL INSERT INTO publication(pubid,title) VALUES (:pubid,:title);
+    EXEC SQL INSERT INTO proceedings(pubid,year) VALUES (:pubid,:year);
+  }
+  if(count==1){
+    EXEC SQL UPDATE publication SET title =:title WHERE pubid =: pubid;
+    EXEC SQL UPDATE proceedings SET year=:year WHERE pubid =: pubid;
+  }
+  printf("\n");
+  printf("Pubid: %s\n", pubid);
+  printf("Type: proceedings\n");
+  printf("Title: %s\n", title);
+  printf("Year: %d\n", year);
+}
+
+void articleUpdateCreate(char* token){
+
+  EXEC SQL BEGIN DECLARE SECTION;
+  int count;
+  char pubid[10];
+  char title [70];
+  int aid;
+  char appearsin[10];
+  int startpage;
+  int endpage;
+  int aorder;
+  int maxvalue;
+  char authorname[22];
+  EXEC SQL END DECLARE SECTION;
+
+  char *authors, *printAuthors;
+  char *str1, *subauthors;
+  int j,i;
+  int commaCount = 1;
+
+  strcpy(pubid,strtok(token,"#"));
+  token = NULL;
+  strcpy(title,strtok(token,"#"));
+  token = NULL;
+  authors = strtok(token,"#");
+  token = NULL;
+  strcpy(appearsin,strtok(token,"#"));
+  token = NULL;
+  startpage = atoi(strtok(token,"#"));
+  token = NULL;
+  endpage = atoi(strtok(token,"#"));
+  token = NULL;
+
+  EXEC SQL 
+  SELECT COUNT(pubid) INTO :count FROM publication where pubid =: pubid;
+
+  if(count==0){
+    EXEC SQL INSERT INTO publication(pubid,title) VALUES (:pubid,:title);
+    for (j = 1, str1 = authors; ; j++, str1 = NULL) {
+      subauthors = strtok(str1,";");
+      if (subauthors == NULL)
+        break;
+      aid = atoi(subauthors);
+      aorder = j;  
+      EXEC SQL INSERT INTO wrote(aid,pubid,aorder) VALUES (:aid,:pubid,:aorder);  
+    }
+
+    EXEC SQL INSERT INTO article(pubid,appearsin,startpage,endpage) VALUES (:pubid,:appearsin,:startpage,:endpage);
+  }
+
+  if(count==1){
+    EXEC SQL UPDATE publication SET title =:title WHERE pubid =: pubid;
+
+    for (j = 1, str1 = authors; ; j++, str1 = NULL) {
+      subauthors = strtok(str1,";");
+      if (subauthors == NULL)
+        break;
+      aid = atoi(subauthors);
+      aorder = j;  
+      EXEC SQL UPDATE wrote SET aid =: aid WHERE pubid =: pubid AND aorder=:aorder;
+
+    }
+
+    EXEC SQL UPDATE article SET appearsin =:appearsin, startpage=:startpage, endpage=:endpage WHERE pubid =: pubid;
+  }
+
+  printf("\n");
+  printf("Pubid: %s\n", pubid);
+  printf("Type: article\n");
+  printf("Title: %s\n", title);
+
+  EXEC SQL DECLARE C3 CURSOR FOR
+
+  SELECT DISTINCT A.name,W.aorder FROM article AR INNER JOIN wrote W ON AR.pubid = W.pubid INNER JOIN author A ON A.aid = W.aid WHERE AR.pubid = :pubid ORDER BY W.aorder;
+
+  EXEC SQL SELECT DISTINCT MAX(W.aorder) INTO :maxvalue FROM article AR INNER JOIN wrote W ON AR.pubid = W.pubid INNER JOIN author A ON A.aid = W.aid WHERE AR.pubid = :pubid;
+
+  printf("Authors: "); 
+
+  EXEC SQL OPEN C3;
+
+  for(;;){
+    EXEC SQL FETCH C3 INTO :authorname, :aorder;
+    if (SQLCODE == 100) { break;}
+    else if (SQLCODE < 0) {break;}
+    else {
+      printf("%s", authorname);
+      if(commaCount<maxvalue)
+        printf(", ");
+      commaCount++;
+    }
+  }
+  printf("\n");
+  printf("In: %s\n", appearsin);
+  printf("Pages: %d--%d\n", startpage,endpage);
+  EXEC SQL CLOSE C3;
+}
+
+
+
+int main(int argc, char *argv[]) {
+  char * getpass();
+
+  EXEC SQL BEGIN DECLARE SECTION;
+  char db[6] = "cs348";
+  EXEC SQL END DECLARE SECTION;
+
+
+  char str[500];
+  int i;
+  char *str1, *token;
+
+  EXEC SQL WHENEVER SQLERROR  GO TO error;
+
+  EXEC SQL CONNECT TO :db;
+
+  while(fgets(str, 500, stdin) != NULL) {
+    i = strlen(str)-1;
+    if( str[ i ] == '\n') 
+      str[i] = '\0';
+    str1 = str;
+    token = strtok(str1, "()");
+    if (token == NULL)
+      break;
+    if (strcmp(token,"author") == 0) {
+      str1 = NULL;
+      token = strtok(str1,"()");
+      authorUpdateCreate(token);
+    }
+    if(strcmp(token,"authorurl") == 0){
+      str1 = NULL;
+      token = strtok(str1,"()");
+      authorurlUpdateCreate(token);
+    }
+
+    if(strcmp(token,"book") == 0){
+      str1 = NULL;
+      token = strtok(str1,"()");
+      bookUpdateCreate(token);
+    }
+
+    if(strcmp(token,"journal") == 0){
+      str1 = NULL;
+      token = strtok(str1,"()");
+      journalUpdateCreate(token);
+    }
+
+    if(strcmp(token,"proceedings") == 0){
+      str1 = NULL;
+      token = strtok(str1,"()");
+      proceedingsUpdateCreate(token);
+    }
+
+    if(strcmp(token,"article") == 0){
+      str1 = NULL;
+      token = strtok(str1,"()");
+      articleUpdateCreate(token);
+    }
+  }
+
+  EXEC SQL COMMIT;
+  EXEC SQL CONNECT reset;
+  exit(0);
+
+  error:
+  check_error("My error",&sqlca);
+  EXEC SQL WHENEVER SQLERROR CONTINUE;
+
+  EXEC SQL ROLLBACK;
+  EXEC SQL CONNECT reset;
+  exit(1);
+}
+
+
